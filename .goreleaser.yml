@@ -69,7 +69,7 @@ changelog:
 release:
   github:
     owner: "{{ .Env.GITHUB_REPOSITORY_OWNER }}"
-    name: "{{ .ProjectName }}"
+    name: "godotq"
   draft: false
   prerelease: auto
   name_template: "{{.ProjectName}} v{{.Version}}"
