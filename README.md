@@ -1,109 +1,226 @@
-# Godot Scene Parser
+# gdq - Godot Scene Query Tool
 
-Godotのtscnファイルをパースしてシーンツリーの状態を表示するGoツールです。
+A Go-based CLI tool to parse Godot .tscn files and display scene tree structures with query capabilities.
 
-## 機能
+## Features
 
-- **tscnファイル解析**: Godotシーンファイルの構造を解析
-- **シーンツリー表示**: ノードの階層構造を視覚的に表示
-- **ノード情報表示**: 各ノードのタイプ、プロパティ、スクリプト情報
-- **統計情報**: シーンの統計データ（ノード数、タイプ別集計など）
-- **複数ファイル対応**: 複数のtscnファイルを一度に解析
+- **tscn File Parsing**: Parse Godot scene file structures
+- **Scene Tree Display**: Visualize node hierarchy
+- **Node Information**: Display node types, properties, and script information
+- **Query Support**: Filter and search for specific nodes by path
+- **Verbose Mode**: Display all node properties in detail
+- **Statistics Summary**: Scene statistics (node count, type breakdown, etc.)
+- **Multiple File Support**: Parse multiple tscn files at once
 
-## インストール
+## Installation
 
 ```bash
-cd bin
-go build -o godot-scene-parser main.go
+go build -o gdq
 ```
 
-## 使用方法
-
-### 単一ファイル解析
+Or on Windows:
 ```bash
-./godot-scene-parser main.tscn
+go build -o gdq.exe
 ```
 
-### 複数ファイル解析
+## Usage
+
+### Basic Usage
+
+Display scene tree:
 ```bash
-./godot-scene-parser main.tscn player.tscn enemy.tscn
+./gdq main.tscn
 ```
 
-### Windows
+### Query Specific Nodes
+
+Search for a specific node and display its subtree:
 ```bash
-godot-scene-parser.exe main.tscn
+./gdq -q Player main.tscn
+./gdq -q "Player/Sprite" main.tscn
 ```
 
-## 出力例
+### Verbose Mode
 
-```
-📂 Godotシーンパーサー
-ファイル: main.tscn
-
-=== シーン統計 ===
-形式バージョン: 3
-読み込みステップ: 5
-総ノード数: 8
-リソース数: 3
-スクリプト付きノード: 2
-
-ノードタイプ別:
-  📁 Node: 1個
-  🏃 CharacterBody2D: 1個
-  🖼️ Sprite2D: 2個
-  🛡️ CollisionShape2D: 1個
-  📷 Camera2D: 1個
-  ⬜ Control: 2個
-
-=== シーンツリー ===
-📁 Main (Node)
-  🏃 Player (CharacterBody2D) [スクリプト: ExtResource("1_abc123")]
-    position: Vector2(100, 200)
-    🖼️ Sprite (Sprite2D)
-      texture: ExtResource("2_def456")
-    🛡️ CollisionShape2D (CollisionShape2D)
-  📷 Camera (Camera2D)
-  ⬜ UI (Control)
-    ⬜ HealthBar (Control)
+Display all node properties:
+```bash
+./gdq -q Player -v main.tscn
 ```
 
-## 対応ノードタイプ
+### Statistics Summary
 
-以下のノードタイプに専用アイコンを用意：
+Display scene statistics:
+```bash
+./gdq -s main.tscn
+```
 
-- **基本ノード**: Node(📁), Node2D(🔵), Node3D(🎯), Control(⬜)
-- **物理ノード**: CharacterBody2D(🏃), RigidBody2D(⚽), Area2D(📡)
-- **ビジュアルノード**: Sprite2D(🖼️), Label(📝), Button(🔘)
-- **コンテナノード**: VBoxContainer(📦), HBoxContainer(📦)
-- **その他**: Camera2D(📷), Timer(⏰), AudioStreamPlayer(🔊)
+### Multiple Files
 
-## 表示される情報
+Parse multiple files:
+```bash
+./gdq main.tscn player.tscn enemy.tscn
+```
 
-### ノード情報
-- ノード名とタイプ
-- アタッチされたスクリプト
-- 重要なプロパティ（position, scale, texture など）
+### Debug Mode
 
-### 統計情報
-- シーン形式バージョン
-- 総ノード数
-- ノードタイプ別集計
-- スクリプト付きノード数
-- リソース数
+Enable debug logging:
+```bash
+./gdq -d main.tscn
+```
 
-## 開発者向け
+## Command Line Flags
 
-### 構造体
-- `GodotNode`: ノード情報
-- `GodotScene`: シーン全体の情報
+- `-q, --query <path>`: Search for a specific node path (e.g., "Player/Sprite")
+- `-v, --verbose`: Display all properties in detail
+- `-s, --summary`: Display statistics summary
+- `-d, --debug`: Enable debug mode
 
-### 主要関数
-- `parseTscnFile()`: tscnファイルの解析
-- `buildSceneTree()`: シーンツリーの構築
-- `printSceneTree()`: ツリー表示
-- `printSceneStats()`: 統計表示
+## Output Example
 
-### 拡張可能
-- 新しいノードタイプのアイコン追加
-- 追加プロパティの表示
-- 出力形式の変更（JSON、XML等）
+### Default Output (Scene Tree)
+
+```
+Control (Control)
+  missionScene (Control)
+    missionSceneUI (Control)
+      missionDetailRect (Panel)
+  scrapScene (Control)
+  partyScene (Control)
+  battleScene (Control)
+    battleField (Control)
+    battleUI (Control)
+```
+
+### With Query (-q flag)
+
+```bash
+./gdq -q battleScene main.tscn
+```
+
+Output:
+```
+battleScene (Control)
+  battleField (Control)
+  battleUI (Control)
+```
+
+### With Verbose Mode (-q -v flags)
+
+```bash
+./gdq -q Player -v main.tscn
+```
+
+Output:
+```
+Player (CharacterBody2D)
+  script: ExtResource("1_abc123")
+  position: Vector2(100, 200)
+  scale: Vector2(1, 1)
+  rotation: 0.0
+  Sprite (Sprite2D)
+    texture: res://player.png
+    scale: Vector2(0.5, 0.5)
+```
+
+### With Summary (-s flag)
+
+```
+=== Scene Statistics ===
+Format Version: 3
+Load Steps: 5
+Total Nodes: 8
+Resources: 3
+Nodes with Scripts: 2
+ExtResources: 3
+SubResources: 2
+
+By Node Type:
+  Control: 5
+  Panel: 1
+  CharacterBody2D: 1
+  Sprite2D: 1
+
+By ExtResource Type:
+  Script: 2
+  Texture2D: 1
+```
+
+## Supported Node Types
+
+The parser supports all Godot node types including:
+
+- **Basic Nodes**: Node, Node2D, Node3D, Control
+- **Physics Nodes**: CharacterBody2D, RigidBody2D, RigidBody3D, Area2D, Area3D
+- **Visual Nodes**: Sprite2D, Sprite3D, Label, RichTextLabel, Button
+- **Container Nodes**: VBoxContainer, HBoxContainer, GridContainer, ScrollContainer
+- **And many more**: Camera2D, Camera3D, Timer, AudioStreamPlayer, AnimationPlayer, etc.
+
+## Displayed Information
+
+### Node Information
+- Node name and type
+- Attached scripts (with resource resolution)
+- Important properties (position, scale, texture, text, etc.)
+- All properties in verbose mode
+
+### Statistics (with -s flag)
+- Scene format version
+- Total node count
+- Node count by type
+- Nodes with scripts count
+- Resource count (ExtResources and SubResources)
+- Resource breakdown by type
+
+## For Developers
+
+### Main Structures
+
+- `GodotNode`: Represents a node in the scene
+  - Properties: Name, Type, Parent, Path, Properties, Children, etc.
+- `GodotResource`: Represents an external or sub-resource
+  - Properties: ID, Type, Path, UID
+- `GodotScene`: Represents the entire scene
+  - Contains all nodes, resources, and scene metadata
+
+### Main Functions
+
+- `ParseTscnFile()`: Parse tscn file and build scene structure
+- `buildSceneTree()`: Build parent-child relationships
+- `printSceneTree()`: Display tree structure
+- `printSceneStats()`: Display statistics
+- `findNodeByPath()`: Search for nodes by path
+- `resolveResourcePath()`: Resolve resource references to actual paths
+
+### Key Features
+
+- **Flexible Path Matching**: Supports exact match, suffix match, and contains match
+- **Resource Resolution**: Automatically resolves ExtResource and SubResource references
+- **Large File Support**: Can handle files with lines up to 10MB (for embedded particle data)
+- **Multiline Property Support**: Correctly parses multiline text properties
+
+## Testing
+
+Run unit tests:
+```bash
+go test
+```
+
+Run integration tests with Godot demo projects:
+```bash
+git submodule update --init
+go test -v
+```
+
+Run performance tests:
+```bash
+go test -v -run TestParsingPerformance
+```
+
+## Requirements
+
+- Go 1.16 or later
+- github.com/spf13/cobra (automatically installed via go.mod)
+
+## License
+
+MIT License

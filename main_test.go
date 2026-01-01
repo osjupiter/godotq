@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// テスト用のシンプルなtscnファイル内容
+// Simple test tscn file content
 const testTscnContent = `[gd_scene load_steps=2 format=3]
 
 [node name="Root" type="Node2D"]
@@ -15,37 +15,37 @@ const testTscnContent = `[gd_scene load_steps=2 format=3]
 [node name="Child2" type="Control" parent="."]
 
 [node name="GrandChild" type="Button" parent="Child1"]
-text = "テストボタン"
+text = "Test Button"
 
 [node name="DeepChild" type="Label" parent="Child1/GrandChild"]
-text = "ディープレベル"
+text = "Deep Level"
 `
 
 func TestTscnParser(t *testing.T) {
-	// テスト用のtempファイルを作成
+	// Create temporary test file
 	tempFile := "test_temp.tscn"
 	err := os.WriteFile(tempFile, []byte(testTscnContent), 0644)
 	if err != nil {
-		t.Fatalf("テストファイル作成エラー: %v", err)
+		t.Fatalf("Failed to create test file: %v", err)
 	}
 	defer os.Remove(tempFile)
 
-	// パーサーをテスト
+	// Test parser
 	scene, err := ParseTscnFile(tempFile)
 	if err != nil {
-		t.Fatalf("パースエラー: %v", err)
+		t.Fatalf("Parse error: %v", err)
 	}
 
-	// 基本チェック
+	// Basic checks
 	if len(scene.AllNodes) != 5 {
-		t.Errorf("期待されるノード数: 5, 実際: %d", len(scene.AllNodes))
+		t.Errorf("Expected 5 nodes, got: %d", len(scene.AllNodes))
 	}
 
 	if scene.RootNode.OriginalName != "Root" {
-		t.Errorf("期待されるルートノード: Root, 実際: %s", scene.RootNode.OriginalName)
+		t.Errorf("Expected root node: Root, got: %s", scene.RootNode.OriginalName)
 	}
 
-	// 構造チェック
+	// Structure checks
 	expectedStructure := map[string][]string{
 		"Root":       {"Child1", "Child2"},
 		"Child1":     {"GrandChild"},
@@ -62,71 +62,71 @@ func TestTscnParser(t *testing.T) {
 		}
 
 		if parentNode == nil {
-			t.Errorf("ノード %s が見つかりません", parentName)
+			t.Errorf("Node %s not found", parentName)
 			continue
 		}
 
 		if len(parentNode.Children) != len(expectedChildren) {
-			t.Errorf("%s の子ノード数が間違っています (期待: %d, 実際: %d)",
+			t.Errorf("%s has wrong number of children (expected: %d, got: %d)",
 				parentName, len(expectedChildren), len(parentNode.Children))
 			continue
 		}
 
 		for i, expectedChild := range expectedChildren {
 			if parentNode.Children[i].OriginalName != expectedChild {
-				t.Errorf("%s の子ノード %d が間違っています (期待: %s, 実際: %s)",
+				t.Errorf("%s child node %d is wrong (expected: %s, got: %s)",
 					parentName, i, expectedChild, parentNode.Children[i].OriginalName)
 			}
 		}
 	}
 
-	// プロパティチェック
+	// Property checks
 	for _, node := range scene.AllNodes {
 		if node.OriginalName == "GrandChild" {
 			if text, exists := node.Properties["text"]; exists {
-				expected := "\"テストボタン\""
+				expected := "\"Test Button\""
 				if text != expected {
-					t.Errorf("GrandChildのtextプロパティが間違っています (期待: %s, 実際: %s)", expected, text)
+					t.Errorf("GrandChild text property is wrong (expected: %s, got: %s)", expected, text)
 				}
 			} else {
-				t.Error("GrandChildのtextプロパティが見つかりません")
+				t.Error("GrandChild text property not found")
 			}
 		}
 
 		if node.OriginalName == "DeepChild" {
 			if text, exists := node.Properties["text"]; exists {
-				expected := "\"ディープレベル\""
+				expected := "\"Deep Level\""
 				if text != expected {
-					t.Errorf("DeepChildのtextプロパティが間違っています (期待: %s, 実際: %s)", expected, text)
+					t.Errorf("DeepChild text property is wrong (expected: %s, got: %s)", expected, text)
 				}
 			} else {
-				t.Error("DeepChildのtextプロパティが見つかりません")
+				t.Error("DeepChild text property not found")
 			}
 		}
 	}
 }
 
 func TestMainTscnStructure(t *testing.T) {
-	// ファイルが存在しない場合はスキップ
+	// Skip if file doesn't exist
 	if _, err := os.Stat("../main.tscn"); os.IsNotExist(err) {
-		t.Skip("../main.tscn が見つかりません。テストをスキップします。")
+		t.Skip("../main.tscn not found. Skipping test.")
 	}
 
 	scene, err := ParseTscnFile("../main.tscn")
 	if err != nil {
-		t.Fatalf("main.tscnパースエラー: %v", err)
+		t.Fatalf("main.tscn parse error: %v", err)
 	}
 
-	// 基本チェック
+	// Basic checks
 	if len(scene.AllNodes) == 0 {
-		t.Fatal("ノードが見つかりません")
+		t.Fatal("No nodes found")
 	}
 
 	if len(scene.Resources) == 0 {
-		t.Error("リソースが見つかりません")
+		t.Error("No resources found")
 	}
 
-	// メインのControlノードを見つける
+	// Find main Control node
 	var mainControl *GodotNode
 	for _, node := range scene.AllNodes {
 		if node.OriginalName == "Control" && node.Parent == "." {
@@ -136,10 +136,10 @@ func TestMainTscnStructure(t *testing.T) {
 	}
 
 	if mainControl == nil {
-		t.Fatal("メインのControlノードが見つかりません")
+		t.Fatal("Main Control node not found")
 	}
 
-	// 各シーンノードがメインControlの直接の子として存在するかチェック
+	// Check each scene node exists as a direct child of main Control
 	expectedScenes := []string{"missionScene", "scrapScene", "partyScene", "battleScene"}
 
 	for _, sceneName := range expectedScenes {
@@ -151,11 +151,11 @@ func TestMainTscnStructure(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Errorf("%s がメインControlの子として見つかりません", sceneName)
+			t.Errorf("%s not found as a child of main Control", sceneName)
 		}
 	}
 
-	// battleSceneの子ノードをチェック
+	// Check battleScene child nodes
 	var battleScene *GodotNode
 	for _, child := range mainControl.Children {
 		if child.OriginalName == "battleScene" {
@@ -165,10 +165,10 @@ func TestMainTscnStructure(t *testing.T) {
 	}
 
 	if battleScene == nil {
-		t.Error("battleSceneが見つかりません")
+		t.Error("battleScene not found")
 	} else {
 		if len(battleScene.Children) < 2 {
-			t.Errorf("battleSceneの子ノード数が不足しています (期待: 2以上, 実際: %d)", len(battleScene.Children))
+			t.Errorf("battleScene has insufficient child nodes (expected: 2 or more, got: %d)", len(battleScene.Children))
 		}
 	}
 }
@@ -180,19 +180,19 @@ func TestMultilineTextParsing(t *testing.T) {
 
 [node name="TestLabel" type="RichTextLabel" parent="."]
 text = "★3
-セイロン"
+Ceylon"
 `
 
 	tempFile := "test_multiline.tscn"
 	err := os.WriteFile(tempFile, []byte(multilineContent), 0644)
 	if err != nil {
-		t.Fatalf("テストファイル作成エラー: %v", err)
+		t.Fatalf("Failed to create test file: %v", err)
 	}
 	defer os.Remove(tempFile)
 
 	scene, err := ParseTscnFile(tempFile)
 	if err != nil {
-		t.Fatalf("パースエラー: %v", err)
+		t.Fatalf("Parse error: %v", err)
 	}
 
 	var testLabel *GodotNode
@@ -204,16 +204,16 @@ text = "★3
 	}
 
 	if testLabel == nil {
-		t.Fatal("TestLabelが見つかりません")
+		t.Fatal("TestLabel not found")
 	}
 
 	text, exists := testLabel.Properties["text"]
 	if !exists {
-		t.Fatal("textプロパティが見つかりません")
+		t.Fatal("text property not found")
 	}
 
-	expected := "★3\nセイロン"
+	expected := "★3\nCeylon"
 	if text != expected {
-		t.Errorf("マルチラインテキストが正しく解析されていません (期待: %q, 実際: %q)", expected, text)
+		t.Errorf("Multiline text not parsed correctly (expected: %q, got: %q)", expected, text)
 	}
 }

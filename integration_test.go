@@ -7,17 +7,17 @@ import (
 	"testing"
 )
 
-// サブモジュールが初期化されているか確認
+// Check if submodule is initialized
 func checkSubmoduleInitialized(t *testing.T) bool {
 	demoProjectsPath := "test/godot-demo-projects"
 	if _, err := os.Stat(demoProjectsPath); os.IsNotExist(err) {
-		t.Skip("godot-demo-projects サブモジュールが初期化されていません。'git submodule update --init' を実行してください。")
+		t.Skip("godot-demo-projects submodule not initialized. Please run 'git submodule update --init'.")
 		return false
 	}
 	return true
 }
 
-// godot-demo-projects内の全tscnファイルを取得
+// Find all tscn files in godot-demo-projects
 func findTscnFiles(rootPath string) ([]string, error) {
 	var tscnFiles []string
 
@@ -36,7 +36,7 @@ func findTscnFiles(rootPath string) ([]string, error) {
 	return tscnFiles, err
 }
 
-// 全デモプロジェクトのtscnファイルをパース
+// Parse all tscn files in demo projects
 func TestGodotDemoProjects(t *testing.T) {
 	if !checkSubmoduleInitialized(t) {
 		return
@@ -44,18 +44,18 @@ func TestGodotDemoProjects(t *testing.T) {
 
 	demoProjectsPath := "test/godot-demo-projects"
 
-	t.Logf("デモプロジェクトディレクトリを検索: %s", demoProjectsPath)
+	t.Logf("Searching demo project directory: %s", demoProjectsPath)
 
 	tscnFiles, err := findTscnFiles(demoProjectsPath)
 	if err != nil {
-		t.Fatalf("tscnファイル検索エラー: %v", err)
+		t.Fatalf("tscn file search error: %v", err)
 	}
 
 	if len(tscnFiles) == 0 {
-		t.Fatal("tscnファイルが見つかりませんでした")
+		t.Fatal("No tscn files found")
 	}
 
-	t.Logf("検出されたtscnファイル数: %d", len(tscnFiles))
+	t.Logf("Detected tscn files: %d", len(tscnFiles))
 
 	successCount := 0
 	failCount := 0
@@ -67,51 +67,51 @@ func TestGodotDemoProjects(t *testing.T) {
 			if err != nil {
 				failCount++
 				failedFiles = append(failedFiles, file)
-				t.Errorf("パースエラー: %v", err)
+				t.Errorf("Parse error: %v", err)
 				return
 			}
 
-			// 基本的な妥当性チェック
+			// Basic validation check
 			if scene == nil {
 				failCount++
 				failedFiles = append(failedFiles, file)
-				t.Error("シーンがnilです")
+				t.Error("Scene is nil")
 				return
 			}
 
-			// ノードが少なくとも1つあることを確認
+			// Ensure at least one node exists
 			if len(scene.AllNodes) == 0 {
-				t.Logf("警告: ノードが見つかりませんでした（空のシーンの可能性）")
+				t.Logf("Warning: No nodes found (possibly empty scene)")
 			}
 
 			successCount++
 		})
 	}
 
-	// サマリー表示
-	t.Logf("\n=== テスト結果サマリー ===")
-	t.Logf("総ファイル数: %d", len(tscnFiles))
-	t.Logf("成功: %d", successCount)
-	t.Logf("失敗: %d", failCount)
+	// Display summary
+	t.Logf("\n=== Test Results Summary ===")
+	t.Logf("Total files: %d", len(tscnFiles))
+	t.Logf("Success: %d", successCount)
+	t.Logf("Failed: %d", failCount)
 
 	if len(failedFiles) > 0 {
-		t.Logf("\n失敗したファイル:")
+		t.Logf("\nFailed files:")
 		for _, file := range failedFiles {
 			t.Logf("  - %s", file)
 		}
 	}
 
-	// 成功率をチェック
+	// Check success rate
 	successRate := float64(successCount) / float64(len(tscnFiles)) * 100
-	t.Logf("成功率: %.2f%%", successRate)
+	t.Logf("Success rate: %.2f%%", successRate)
 
-	// 成功率が80%未満の場合は警告
+	// Warn if success rate is below 80%
 	if successRate < 80.0 {
-		t.Errorf("成功率が低すぎます (%.2f%% < 80%%)", successRate)
+		t.Errorf("Success rate is too low (%.2f%% < 80%%)", successRate)
 	}
 }
 
-// 特定のデモプロジェクトを詳細にテスト
+// Test specific demo projects in detail
 func TestSpecificDemoProjects(t *testing.T) {
 	if !checkSubmoduleInitialized(t) {
 		return
@@ -139,41 +139,41 @@ func TestSpecificDemoProjects(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// ファイル存在チェック
+			// Check file existence
 			if _, err := os.Stat(tc.path); os.IsNotExist(err) {
-				t.Skipf("ファイルが見つかりません: %s", tc.path)
+				t.Skipf("File not found: %s", tc.path)
 				return
 			}
 
 			scene, err := ParseTscnFile(tc.path)
 			if err != nil {
-				t.Fatalf("パースエラー: %v", err)
+				t.Fatalf("Parse error: %v", err)
 			}
 
-			// ノード数チェック
+			// Check node count
 			if len(scene.AllNodes) < tc.minNodes {
-				t.Errorf("ノード数が期待より少ない (期待: %d以上, 実際: %d)",
+				t.Errorf("Node count less than expected (expected: %d or more, got: %d)",
 					tc.minNodes, len(scene.AllNodes))
 			}
 
-			// ルートノードチェック
+			// Check root node
 			if tc.shouldHaveRoot && scene.RootNode == nil {
-				t.Error("ルートノードが見つかりません")
+				t.Error("Root node not found")
 			}
 
 			if scene.RootNode != nil {
-				t.Logf("ルートノード: %s (%s)", scene.RootNode.OriginalName, scene.RootNode.Type)
-				t.Logf("総ノード数: %d", len(scene.AllNodes))
-				t.Logf("子ノード数: %d", len(scene.RootNode.Children))
+				t.Logf("Root node: %s (%s)", scene.RootNode.OriginalName, scene.RootNode.Type)
+				t.Logf("Total nodes: %d", len(scene.AllNodes))
+				t.Logf("Child nodes: %d", len(scene.RootNode.Children))
 			}
 		})
 	}
 }
 
-// パフォーマンステスト（オプション）
+// Performance test (optional)
 func TestParsingPerformance(t *testing.T) {
 	if testing.Short() {
-		t.Skip("パフォーマンステストをスキップ (-short フラグ)")
+		t.Skip("Skipping performance test (-short flag)")
 	}
 
 	if !checkSubmoduleInitialized(t) {
@@ -183,14 +183,14 @@ func TestParsingPerformance(t *testing.T) {
 	demoProjectsPath := "test/godot-demo-projects"
 	tscnFiles, err := findTscnFiles(demoProjectsPath)
 	if err != nil {
-		t.Fatalf("tscnファイル検索エラー: %v", err)
+		t.Fatalf("tscn file search error: %v", err)
 	}
 
 	if len(tscnFiles) == 0 {
-		t.Skip("tscnファイルが見つかりませんでした")
+		t.Skip("No tscn files found")
 	}
 
-	// 最初の10ファイルでパフォーマンステスト
+	// Performance test with first 10 files
 	testFiles := tscnFiles
 	if len(testFiles) > 10 {
 		testFiles = tscnFiles[:10]
@@ -200,7 +200,7 @@ func TestParsingPerformance(t *testing.T) {
 		t.Run(filepath.Base(file), func(t *testing.T) {
 			_, err := ParseTscnFile(file)
 			if err != nil {
-				t.Logf("パースエラー (パフォーマンステストのため継続): %v", err)
+				t.Logf("Parse error (continuing for performance test): %v", err)
 			}
 		})
 	}

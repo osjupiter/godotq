@@ -11,14 +11,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// デバッグモード
+// Debug mode flag
 var debugMode = false
 
-// 表示オプション
+// Display options
 var showSummary = false
 var nodePath = ""
+var verbose = false
 
-// ノード情報を表す構造体
+// GodotNode represents a node in the Godot scene
 type GodotNode struct {
 	Name         string
 	OriginalName string
@@ -31,7 +32,7 @@ type GodotNode struct {
 	Children     []*GodotNode
 }
 
-// リソース情報を表す構造体
+// GodotResource represents a resource in the Godot scene
 type GodotResource struct {
 	ID   string
 	Type string
@@ -39,7 +40,7 @@ type GodotResource struct {
 	UID  string
 }
 
-// シーン情報を表す構造体
+// GodotScene represents the entire Godot scene
 type GodotScene struct {
 	Version       string
 	LoadSteps     int
@@ -52,20 +53,20 @@ type GodotScene struct {
 	SubResources  map[string]*GodotResource
 }
 
-// デバッグログ
+// debugLog prints debug messages when debug mode is enabled
 func debugLog(msg string, args ...interface{}) {
 	if debugMode {
 		fmt.Printf("[DEBUG] "+msg+"\n", args...)
 	}
 }
 
-// ParseTscnFile tscnファイルをパースする
+// ParseTscnFile parses a Godot .tscn file
 func ParseTscnFile(filepath string) (*GodotScene, error) {
-	debugLog("ファイルを開いています: %s", filepath)
+	debugLog("Opening file: %s", filepath)
 
 	file, err := os.Open(filepath)
 	if err != nil {
-		return nil, fmt.Errorf("ファイルを開けませんでした: %v", err)
+		return nil, fmt.Errorf("failed to open file: %v", err)
 	}
 	defer file.Close()
 
@@ -78,7 +79,7 @@ func ParseTscnFile(filepath string) (*GodotScene, error) {
 	}
 
 	scanner := bufio.NewScanner(file)
-	// バッファサイズを増やして大きなファイルに対応（最大10MB）
+	// Increase buffer size to handle large files (up to 10MB)
 	const maxCapacity = 10 * 1024 * 1024 // 10MB
 	buf := make([]byte, maxCapacity)
 	scanner.Buffer(buf, maxCapacity)
@@ -95,12 +96,12 @@ func ParseTscnFile(filepath string) (*GodotScene, error) {
 		line := strings.TrimSpace(scanner.Text())
 		originalLine := scanner.Text()
 
-		debugLog("行 %d: %s", lineNum, originalLine)
+		debugLog("Line %d: %s", lineNum, originalLine)
 
-		// マルチライン処理
+		// Handle multiline properties
 		if inMultiline {
 			if strings.HasSuffix(line, "\"") {
-				// マルチラインの終了
+				// End of multiline
 				multilineValue.WriteString(strings.TrimSuffix(line, "\""))
 				if currentNode != nil {
 					currentNode.Properties[multilineProperty] = multilineValue.String()
@@ -113,59 +114,59 @@ func ParseTscnFile(filepath string) (*GodotScene, error) {
 				multilineValue.Reset()
 				continue
 			} else {
-				// マルチラインの継続
+				// Continue multiline
 				multilineValue.WriteString(line + "\n")
 				continue
 			}
 		}
 
-		// 空行やコメントをスキップ
+		// Skip empty lines and comments
 		if line == "" || strings.HasPrefix(line, ";") {
 			continue
 		}
 
-		// ヘッダー情報をパース
+		// Parse header information
 		if strings.HasPrefix(line, "[gd_scene") {
-			debugLog("ヘッダーをパース: %s", line)
+			debugLog("Parsing header: %s", line)
 			parseHeader(line, scene)
 			inNode = false
 			continue
 		}
 
-		// リソース情報をパース
+		// Parse resource information
 		if strings.HasPrefix(line, "[ext_resource") || strings.HasPrefix(line, "[sub_resource") {
-			debugLog("リソースをパース: %s", line)
+			debugLog("Parsing resource: %s", line)
 			parseResource(line, scene)
 			inNode = false
 			continue
 		}
 
-		// ノード開始
+		// Node start
 		if strings.HasPrefix(line, "[node") {
-			debugLog("ノード開始: %s", line)
+			debugLog("Node start: %s", line)
 			if currentNode != nil {
-				debugLog("前のノードを追加: %s (%s)", currentNode.Name, currentNode.Type)
+				debugLog("Adding previous node: %s (%s)", currentNode.Name, currentNode.Type)
 				scene.AllNodes = append(scene.AllNodes, currentNode)
 			}
 			currentNode = parseNodeHeader(line)
 			if currentNode != nil {
-				debugLog("新しいノード作成: %s (%s) parent=%s", currentNode.Name, currentNode.Type, currentNode.Parent)
+				debugLog("Created new node: %s (%s) parent=%s", currentNode.Name, currentNode.Type, currentNode.Parent)
 			}
 			inNode = true
 			continue
 		}
 
-		// その他のセクション開始（コネクションなど）
+		// Other sections (connections, etc.)
 		if strings.HasPrefix(line, "[") {
-			debugLog("その他のセクション: %s", line)
+			debugLog("Other section: %s", line)
 			inNode = false
 			continue
 		}
 
-		// ノード内のプロパティ
+		// Properties within a node
 		if inNode && currentNode != nil {
-			debugLog("プロパティをパース: %s", line)
-			// マルチラインの開始チェック
+			debugLog("Parsing property: %s", line)
+			// Check for multiline start
 			if strings.Contains(line, "=") {
 				parts := strings.SplitN(line, "=", 2)
 				if len(parts) == 2 {
@@ -173,7 +174,7 @@ func ParseTscnFile(filepath string) (*GodotScene, error) {
 					value := strings.TrimSpace(parts[1])
 
 					if strings.HasPrefix(value, "\"") && !strings.HasSuffix(value, "\"") {
-						// マルチラインの開始
+						// Multiline start
 						inMultiline = true
 						multilineProperty = key
 						multilineValue.WriteString(strings.TrimPrefix(value, "\"") + "\n")
@@ -185,21 +186,21 @@ func ParseTscnFile(filepath string) (*GodotScene, error) {
 		}
 	}
 
-	// 最後のノードを追加
+	// Add the last node
 	if currentNode != nil {
-		debugLog("最後のノードを追加: %s (%s)", currentNode.Name, currentNode.Type)
+		debugLog("Adding last node: %s (%s)", currentNode.Name, currentNode.Type)
 		scene.AllNodes = append(scene.AllNodes, currentNode)
 	}
 
-	debugLog("パース完了。ノード総数: %d", len(scene.AllNodes))
+	debugLog("Parsing complete. Total nodes: %d", len(scene.AllNodes))
 
-	// シーンツリーを構築
+	// Build scene tree
 	buildSceneTree(scene)
 
 	return scene, scanner.Err()
 }
 
-// ヘッダー情報をパース
+// parseHeader parses the scene header
 func parseHeader(line string, scene *GodotScene) {
 	// [gd_scene load_steps=3 format=3]
 	re := regexp.MustCompile(`load_steps=(\d+)`)
@@ -213,7 +214,7 @@ func parseHeader(line string, scene *GodotScene) {
 	}
 }
 
-// リソース情報をパース
+// parseResource parses resource information
 func parseResource(line string, scene *GodotScene) {
 	scene.Resources = append(scene.Resources, line)
 
@@ -224,56 +225,56 @@ func parseResource(line string, scene *GodotScene) {
 	}
 }
 
-// ExtResourceをパース
+// parseExtResource parses external resources
 func parseExtResource(line string, scene *GodotScene) {
 	resource := &GodotResource{}
 
-	// type="Script" を抽出
+	// Extract type="Script"
 	typeRe := regexp.MustCompile(`type="([^"]*)"`)
 	if matches := typeRe.FindStringSubmatch(line); len(matches) > 1 {
 		resource.Type = matches[1]
 	}
 
-	// path="res://..." を抽出
+	// Extract path="res://..."
 	pathRe := regexp.MustCompile(`path="([^"]*)"`)
 	if matches := pathRe.FindStringSubmatch(line); len(matches) > 1 {
 		resource.Path = matches[1]
 	}
 
-	// id="1_abc123" を抽出（これが実際の参照で使われるID）
+	// Extract id="1_abc123" (this is the actual ID used in references)
 	idRe := regexp.MustCompile(`\bid="([^"]*)"`)
 	if matches := idRe.FindStringSubmatch(line); len(matches) > 1 {
 		resource.ID = matches[1]
 	}
 
-	// uid="uid://..." を抽出
+	// Extract uid="uid://..."
 	uidRe := regexp.MustCompile(`uid="([^"]*)"`)
 	if matches := uidRe.FindStringSubmatch(line); len(matches) > 1 {
 		resource.UID = matches[1]
 	}
 
-	// IDがある場合に保存（IDが実際の参照キー）
+	// Save if ID exists (ID is the actual reference key)
 	if resource.ID != "" {
 		scene.ExtResources[resource.ID] = resource
-		debugLog("ExtResource追加: %s (%s) -> %s", resource.ID, resource.Type, resource.Path)
+		debugLog("Added ExtResource: %s (%s) -> %s", resource.ID, resource.Type, resource.Path)
 	} else if resource.UID != "" {
-		// IDがない場合はUIDを使用
+		// Use UID if no ID
 		scene.ExtResources[resource.UID] = resource
-		debugLog("ExtResource追加: %s (%s) -> %s", resource.UID, resource.Type, resource.Path)
+		debugLog("Added ExtResource: %s (%s) -> %s", resource.UID, resource.Type, resource.Path)
 	}
 }
 
-// SubResourceをパース
+// parseSubResource parses sub-resources
 func parseSubResource(line string, scene *GodotScene) {
 	resource := &GodotResource{}
 
-	// type="CanvasTexture" を抽出
+	// Extract type="CanvasTexture"
 	typeRe := regexp.MustCompile(`type="([^"]*)"`)
 	if matches := typeRe.FindStringSubmatch(line); len(matches) > 1 {
 		resource.Type = matches[1]
 	}
 
-	// id="CanvasTexture_38dae" を抽出
+	// Extract id="CanvasTexture_38dae"
 	idRe := regexp.MustCompile(`id="([^"]*)"`)
 	if matches := idRe.FindStringSubmatch(line); len(matches) > 1 {
 		resource.ID = matches[1]
@@ -281,11 +282,11 @@ func parseSubResource(line string, scene *GodotScene) {
 
 	if resource.ID != "" {
 		scene.SubResources[resource.ID] = resource
-		debugLog("SubResource追加: %s (%s)", resource.ID, resource.Type)
+		debugLog("Added SubResource: %s (%s)", resource.ID, resource.Type)
 	}
 }
 
-// ノードヘッダーをパース
+// parseNodeHeader parses a node header line
 func parseNodeHeader(line string) *GodotNode {
 	node := &GodotNode{
 		Properties: make(map[string]string),
@@ -316,7 +317,7 @@ func parseNodeHeader(line string) *GodotNode {
 	return node
 }
 
-// ノードプロパティをパース
+// parseNodeProperty parses a node property line
 func parseNodeProperty(line string, node *GodotNode) {
 	// script = ExtResource("1_abc123")
 	if strings.Contains(line, "=") {
@@ -325,21 +326,21 @@ func parseNodeProperty(line string, node *GodotNode) {
 			key := strings.TrimSpace(parts[0])
 			value := strings.TrimSpace(parts[1])
 
-			// 複数行テキストの処理
+			// Handle multiline text
 			if strings.HasPrefix(value, "\"") && !strings.HasSuffix(value, "\"") {
-				// 複数行の開始
+				// Start of multiline
 				value = strings.TrimPrefix(value, "\"")
 			} else if strings.HasSuffix(value, "\"") && !strings.HasPrefix(value, "\"") {
-				// 複数行の終了
+				// End of multiline
 				value = strings.TrimSuffix(value, "\"")
 			}
 
-			// 改行文字を保持
+			// Preserve newline characters
 			value = strings.ReplaceAll(value, "\\n", "\n")
 
 			node.Properties[key] = value
 
-			// 特別なプロパティを処理
+			// Handle special properties
 			if key == "script" {
 				node.Script = value
 			}
@@ -347,102 +348,102 @@ func parseNodeProperty(line string, node *GodotNode) {
 	}
 }
 
-// シーンツリーを構築
+// buildSceneTree builds the scene tree structure
 func buildSceneTree(scene *GodotScene) {
-	debugLog("シーンツリー構築開始")
+	debugLog("Building scene tree")
 
 	pathMap := make(map[string]*GodotNode)
 
-	// 順次処理で親子関係を構築（コンテキストを維持）
+	// Build parent-child relationships sequentially (maintaining context)
 	for i, node := range scene.AllNodes {
-		// オリジナル名を保存
+		// Save original name
 		node.OriginalName = node.Name
 
-		debugLog("ノード処理: %s (parent: %s)", node.Name, node.Parent)
+		debugLog("Processing node: %s (parent: %s)", node.Name, node.Parent)
 
-		// 親ノードを決定
+		// Determine parent node
 		var parentNode *GodotNode
 		if node.Parent == "" || node.Parent == "." {
-			// ルートノードまたはルートの直接の子
+			// Root node or direct child of root
 			if scene.RootNode == nil && node.Parent == "" {
-				// 最初のノードをルートとする
+				// Set first node as root
 				scene.RootNode = node
 				node.Path = node.Name
 				pathMap[node.Path] = node
-				debugLog("ルートノード設定: %s", node.Name)
+				debugLog("Root node set: %s", node.Name)
 				continue
 			} else if node.Parent == "." && scene.RootNode != nil {
-				// ルートの直接の子
+				// Direct child of root
 				parentNode = scene.RootNode
 			}
 		} else {
-			// 親ノードを検索（既に処理されたノードの中から）
+			// Search for parent node (among already processed nodes)
 			parentNode = findParentInProcessedNodes(node.Parent, pathMap, scene.AllNodes[:i])
 		}
 
-		// 親ノードが見つかった場合
+		// If parent node found
 		if parentNode != nil {
-			debugLog("親ノード見つかりました: %s -> %s", node.Name, parentNode.OriginalName)
+			debugLog("Parent node found: %s -> %s", node.Name, parentNode.OriginalName)
 			parentNode.Children = append(parentNode.Children, node)
 			node.Path = parentNode.Path + "/" + node.Name
 		} else {
-			// 親ノードが見つからない場合、ルートの子として扱う
-			debugLog("親ノードが見つからないため、ルートの子として処理: %s", node.Name)
+			// If parent not found, treat as child of root
+			debugLog("Parent not found, treating as child of root: %s", node.Name)
 			if scene.RootNode != nil {
 				scene.RootNode.Children = append(scene.RootNode.Children, node)
 				node.Path = scene.RootNode.Path + "/" + node.Name
 			} else {
-				// ルートノードが未設定の場合、このノードをルートとする
+				// If root node not set, set this node as root
 				scene.RootNode = node
 				node.Path = node.Name
 			}
 		}
 
 		pathMap[node.Path] = node
-		debugLog("パス設定: %s -> %s", node.Name, node.Path)
+		debugLog("Path set: %s -> %s", node.Name, node.Path)
 	}
 
 
-	debugLog("シーンツリー構築完了")
+	debugLog("Scene tree construction complete")
 }
 
-// 処理済みノードの中から親ノードを検索
+// findParentInProcessedNodes searches for parent node among processed nodes
 func findParentInProcessedNodes(parentPath string, pathMap map[string]*GodotNode, processedNodes []*GodotNode) *GodotNode {
-	debugLog("処理済みノードから親検索: %s", parentPath)
+	debugLog("Searching for parent in processed nodes: %s", parentPath)
 
-	// 完全なパスで検索
+	// Search by complete path
 	if parentNode, exists := pathMap[parentPath]; exists {
-		debugLog("完全パスマッチ: %s", parentPath)
+		debugLog("Complete path match: %s", parentPath)
 		return parentNode
 	}
 
-	// 単純な名前で検索（処理済みノードの中から最初に見つかったもの）
-	// 処理順序に従って最初に見つかったものを優先
+	// Search by simple name (first found in processed nodes)
+	// Prioritize first found according to processing order
 	for _, node := range processedNodes {
 		if node.OriginalName == parentPath {
-			debugLog("名前マッチ（順次）: %s -> %s", parentPath, node.Path)
+			debugLog("Name match (sequential): %s -> %s", parentPath, node.Path)
 			return node
 		}
 	}
 
-	// 複雑なパスの場合
+	// For complex paths
 	if strings.Contains(parentPath, "/") {
 		parts := strings.Split(parentPath, "/")
 		parentName := parts[len(parts)-1]
 
-		// 処理順序に従って最初に見つかったものを優先
+		// Prioritize first found according to processing order
 		for _, node := range processedNodes {
 			if node.OriginalName == parentName {
-				debugLog("名前マッチ: %s -> %s", parentName, node.Path)
+				debugLog("Name match: %s -> %s", parentName, node.Path)
 				return node
 			}
 		}
 	}
 
-	// パスの末尾を基準に検索（最後の手段）
+	// Search based on path suffix (last resort)
 	for path, node := range pathMap {
 		if strings.HasSuffix(path, "/"+parentPath) {
-			debugLog("末尾マッチ: %s -> %s", parentPath, path)
+			debugLog("Suffix match: %s -> %s", parentPath, path)
 			return node
 		}
 	}
@@ -450,48 +451,48 @@ func findParentInProcessedNodes(parentPath string, pathMap map[string]*GodotNode
 	return nil
 }
 
-// 親ノードを検索するヘルパー関数
+// findParentNode is a helper function to search for parent node
 func findParentNode(parentPath string, pathMap, nodeMap map[string]*GodotNode, currentNodePath string) *GodotNode {
-	debugLog("親ノード検索: %s (current: %s)", parentPath, currentNodePath)
+	debugLog("Searching for parent node: %s (current: %s)", parentPath, currentNodePath)
 
-	// 完全なパスで検索（最優先）
+	// Search by complete path (highest priority)
 	if parentNode, exists := pathMap[parentPath]; exists {
-		debugLog("完全パスマッチ: %s", parentPath)
+		debugLog("Complete path match: %s", parentPath)
 		return parentNode
 	}
 
-	// 複雑なパスの場合
+	// For complex paths
 	if strings.Contains(parentPath, "/") {
-		// より具体的なパスマッチングを行う
+		// Perform more specific path matching
 		for path, node := range pathMap {
 			if strings.HasSuffix(path, parentPath) {
-				debugLog("部分パスマッチ: %s -> %s", parentPath, path)
+				debugLog("Partial path match: %s -> %s", parentPath, path)
 				return node
 			}
 		}
 
-		// 段階的にパスをマッチング
+		// Match paths stepwise
 		parts := strings.Split(parentPath, "/")
 		for i := len(parts) - 1; i >= 0; i-- {
 			testPath := strings.Join(parts[i:], "/")
 			if parentNode, exists := pathMap[testPath]; exists {
-				debugLog("段階的パスマッチ: %s -> %s", parentPath, testPath)
+				debugLog("Stepwise path match: %s -> %s", parentPath, testPath)
 				return parentNode
 			}
 		}
 
-		// 最後の要素だけで検索（最後の手段）
+		// Search by last element only (last resort)
 		parentName := parts[len(parts)-1]
-		debugLog("複雑なパスを単純化: %s -> %s", parentPath, parentName)
+		debugLog("Simplify complex path: %s -> %s", parentPath, parentName)
 
-		// 名前でマッチしたノードが複数ある場合、階層的に最も近いものを選ぶ
+		// If multiple nodes match by name, choose the hierarchically closest one
 		var bestMatch *GodotNode
 		for path, node := range pathMap {
 			if strings.HasSuffix(path, "/"+parentName) || node.OriginalName == parentName {
 				if bestMatch == nil {
 					bestMatch = node
 				} else {
-					// より短いパス（より上位の階層）を優先
+					// Prioritize shorter path (higher hierarchy)
 					if len(node.Path) < len(bestMatch.Path) {
 						bestMatch = node
 					}
@@ -500,37 +501,37 @@ func findParentNode(parentPath string, pathMap, nodeMap map[string]*GodotNode, c
 		}
 
 		if bestMatch != nil {
-			debugLog("最適マッチ選択: %s -> %s", parentName, bestMatch.Path)
+			debugLog("Optimal match selected: %s -> %s", parentName, bestMatch.Path)
 			return bestMatch
 		}
 	}
 
-	// 単純な名前で検索
+	// Search by simple name
 	if parentNode, exists := nodeMap[parentPath]; exists {
-		debugLog("名前マッチ: %s", parentPath)
+		debugLog("Name match: %s", parentPath)
 		return parentNode
 	}
 
 	return nil
 }
 
-// パスでノードを検索（シーン全体から）
+// findNodeByPath searches for node by path (from entire scene)
 func findNodeByPath(scene *GodotScene, path string) *GodotNode {
 	for _, node := range scene.AllNodes {
-		// 完全一致
+		// Exact match
 		if node.Path == path || node.OriginalName == path {
 			return node
 		}
 	}
 
-	// 部分マッチ（末尾）
+	// Partial match (suffix)
 	for _, node := range scene.AllNodes {
 		if strings.HasSuffix(node.Path, "/"+path) {
 			return node
 		}
 	}
 
-	// パス内に含まれる（より柔軟な検索）
+	// Contained in path (more flexible search)
 	for _, node := range scene.AllNodes {
 		if strings.Contains(node.Path, path) {
 			return node
@@ -540,11 +541,11 @@ func findNodeByPath(scene *GodotScene, path string) *GodotNode {
 	return nil
 }
 
-// ルートからノードまでのパスを取得
+// getPathToNode gets the path from root to node
 func getPathToNode(scene *GodotScene, targetNode *GodotNode) []*GodotNode {
 	var path []*GodotNode
 
-	// ルートから辿る
+	// Traverse from root
 	var findPath func(node *GodotNode, target *GodotNode) bool
 	findPath = func(node *GodotNode, target *GodotNode) bool {
 		path = append(path, node)
@@ -559,7 +560,7 @@ func getPathToNode(scene *GodotScene, targetNode *GodotNode) []*GodotNode {
 			}
 		}
 
-		// 見つからなかったので除去
+		// Not found, removing
 		path = path[:len(path)-1]
 		return false
 	}
@@ -571,32 +572,15 @@ func getPathToNode(scene *GodotScene, targetNode *GodotNode) []*GodotNode {
 	return path
 }
 
-// 指定されたノードのパスとサブツリーを表示
+// printNodeWithPath displays path and subtree of specified node
 func printNodeWithPath(scene *GodotScene, targetNode *GodotNode) {
-	// ルートからのパスを表示
-	pathNodes := getPathToNode(scene, targetNode)
 
-	if len(pathNodes) > 0 {
-		fmt.Println("=== パス ===")
-		for i, node := range pathNodes {
-			indentStr := strings.Repeat("  ", i)
 
-			if node == targetNode {
-				// ターゲットノードを強調
-				fmt.Printf("%s%s (%s) ← **ここ**\n", indentStr, node.OriginalName, node.Type)
-			} else {
-				fmt.Printf("%s%s (%s)\n", indentStr, node.OriginalName, node.Type)
-			}
-		}
-		fmt.Println()
-	}
-
-	// ターゲットノード以下のサブツリーを表示
-	fmt.Println("=== サブツリー ===")
+	// Display subtree under target node
 	printSceneTree(targetNode, 0, scene)
 }
 
-// シーンツリーを表示
+// printSceneTree displays the scene tree
 func printSceneTree(node *GodotNode, indent int, scene *GodotScene) {
 	if node == nil {
 		return
@@ -609,26 +593,32 @@ func printSceneTree(node *GodotNode, indent int, scene *GodotScene) {
 	if node.Script != "" {
 		scriptPath := resolveResourcePath(node.Script, scene)
 		if scriptPath != "" {
-			fmt.Printf(" [スクリプト: %s]", scriptPath)
+			fmt.Printf(" [Script: %s]", scriptPath)
 		} else {
-			fmt.Printf(" [スクリプト: %s]", node.Script)
+			fmt.Printf(" [Script: %s]", node.Script)
 		}
 	}
 
 	fmt.Println()
 
-	// 重要なプロパティを表示
+	// Display properties
 	if len(node.Properties) > 0 {
-		showImportantProperties(node, indent+1, scene)
+		if verbose {
+			// Verbose mode: display all properties
+			showAllProperties(node, indent+1, scene)
+		} else {
+			// Normal mode: display important properties only
+			showImportantProperties(node, indent+1, scene)
+		}
 	}
 
-	// 子ノードを再帰的に表示
+	// Display child nodes recursively
 	for _, child := range node.Children {
 		printSceneTree(child, indent+1, scene)
 	}
 }
 
-// 重要なプロパティを表示
+// showImportantProperties displays important properties
 func showImportantProperties(node *GodotNode, indent int, scene *GodotScene) {
 	indentStr := strings.Repeat("  ", indent)
 	importantProps := []string{"position", "scale", "rotation", "size", "text", "texture", "visible"}
@@ -636,7 +626,7 @@ func showImportantProperties(node *GodotNode, indent int, scene *GodotScene) {
 	for _, prop := range importantProps {
 		if value, exists := node.Properties[prop]; exists {
 			if prop == "texture" {
-				// テクスチャリソースを解決
+				// Resolve texture resource
 				texturePath := resolveResourcePath(value, scene)
 				if texturePath != "" {
 					fmt.Printf("%s  %s: %s\n", indentStr, prop, texturePath)
@@ -650,9 +640,38 @@ func showImportantProperties(node *GodotNode, indent int, scene *GodotScene) {
 	}
 }
 
-// リソース参照を実際のパスに解決
+// showAllProperties displays all properties (for verbose mode)
+func showAllProperties(node *GodotNode, indent int, scene *GodotScene) {
+	if len(node.Properties) == 0 {
+		return
+	}
+
+	indentStr := strings.Repeat("  ", indent)
+
+	for prop, value := range node.Properties {
+		// Resolve resource references
+		if strings.Contains(value, "ExtResource") || strings.Contains(value, "SubResource") {
+			resolvedPath := resolveResourcePath(value, scene)
+			if resolvedPath != "" {
+				fmt.Printf("%s  %s: %s\n", indentStr, prop, resolvedPath)
+				continue
+			}
+		}
+
+		// Truncate values that are too long
+		displayValue := value
+		maxLen := 100
+		if len(value) > maxLen {
+			displayValue = value[:maxLen] + "..."
+		}
+
+		fmt.Printf("%s  %s: %s\n", indentStr, prop, displayValue)
+	}
+}
+
+// resolveResourcePath resolves resource references to actual paths
 func resolveResourcePath(resourceRef string, scene *GodotScene) string {
-	// ExtResource("1_abc123") の形式を解析
+	// Parse ExtResource("1_abc123") format
 	extResourceRe := regexp.MustCompile(`ExtResource\("([^"]*)"\)`)
 	if matches := extResourceRe.FindStringSubmatch(resourceRef); len(matches) > 1 {
 		resourceID := matches[1]
@@ -661,7 +680,7 @@ func resolveResourcePath(resourceRef string, scene *GodotScene) string {
 		}
 	}
 
-	// SubResource("SubResource_123") の形式を解析
+	// Parse SubResource("SubResource_123") format
 	subResourceRe := regexp.MustCompile(`SubResource\("([^"]*)"\)`)
 	if matches := subResourceRe.FindStringSubmatch(resourceRef); len(matches) > 1 {
 		resourceID := matches[1]
@@ -673,15 +692,15 @@ func resolveResourcePath(resourceRef string, scene *GodotScene) string {
 	return ""
 }
 
-// シーン統計を表示
+// printSceneStats displays scene statistics
 func printSceneStats(scene *GodotScene) {
-	fmt.Println("=== シーン統計 ===")
-	fmt.Printf("形式バージョン: %d\n", scene.Format)
-	fmt.Printf("読み込みステップ: %d\n", scene.LoadSteps)
-	fmt.Printf("総ノード数: %d\n", len(scene.AllNodes))
-	fmt.Printf("リソース数: %d\n", len(scene.Resources))
+	fmt.Println("=== Scene Statistics ===")
+	fmt.Printf("Format Version: %d\n", scene.Format)
+	fmt.Printf("Load Steps: %d\n", scene.LoadSteps)
+	fmt.Printf("Total Nodes: %d\n", len(scene.AllNodes))
+	fmt.Printf("Resources: %d\n", len(scene.Resources))
 
-	// ノードタイプ別集計
+	// Count by node type
 	typeCount := make(map[string]int)
 	scriptCount := 0
 
@@ -692,26 +711,26 @@ func printSceneStats(scene *GodotScene) {
 		}
 	}
 
-	fmt.Printf("スクリプト付きノード: %d\n", scriptCount)
+	fmt.Printf("Nodes with Scripts: %d\n", scriptCount)
 
-	// リソース統計
+	// Resource statistics
 	fmt.Printf("ExtResources: %d\n", len(scene.ExtResources))
 	fmt.Printf("SubResources: %d\n", len(scene.SubResources))
 
-	fmt.Println("\nノードタイプ別:")
+	fmt.Println("\nBy Node Type:")
 	for nodeType, count := range typeCount {
-		fmt.Printf("  %s: %d個\n", nodeType, count)
+		fmt.Printf("  %s: %d\n", nodeType, count)
 	}
 
-	// ExtResourceタイプ別集計
+	// Count by ExtResource type
 	if len(scene.ExtResources) > 0 {
-		fmt.Println("\nExtResourceタイプ別:")
+		fmt.Println("\nBy ExtResource Type:")
 		extTypeCount := make(map[string]int)
 		for _, resource := range scene.ExtResources {
 			extTypeCount[resource.Type]++
 		}
 		for extType, count := range extTypeCount {
-			fmt.Printf("  %s: %d個\n", extType, count)
+			fmt.Printf("  %s: %d\n", extType, count)
 		}
 	}
 
@@ -719,75 +738,71 @@ func printSceneStats(scene *GodotScene) {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "gdq [flags] <tscnファイル> [tscnファイル...]",
-	Short: "Godotシーンファイルパーサー",
-	Long:  `Godotのtscnファイルをパースしてシーンツリーの状態を表示するツールです。`,
+	Use:   "gdq [flags] <tscn file> [tscn files...]",
+	Short: "Godot scene file parser",
+	Long:  `Parse Godot .tscn files and display the scene tree structure.`,
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// 最初のファイルを処理
+		// Process first file
 		tscnFile := args[0]
 
-		// ファイル存在チェック
+		// Check file existence
 		if _, err := os.Stat(tscnFile); os.IsNotExist(err) {
-			return fmt.Errorf("ファイルが見つかりません: %s", tscnFile)
+			return fmt.Errorf("file not found: %s", tscnFile)
 		}
 
-		fmt.Printf("📂 Godotシーンパーサー\n")
-		fmt.Printf("ファイル: %s\n\n", tscnFile)
-
-		// tscnファイルをパース
+		// Parse tscn file
 		scene, err := ParseTscnFile(tscnFile)
 		if err != nil {
-			return fmt.Errorf("パースエラー: %v", err)
+			return fmt.Errorf("parse error: %v", err)
 		}
 
-		// ノードパス指定がある場合
+		// If node path is specified
 		if nodePath != "" {
 			targetNode := findNodeByPath(scene, nodePath)
 			if targetNode == nil {
-				return fmt.Errorf("ノードが見つかりません: %s", nodePath)
+				return fmt.Errorf("node not found: %s", nodePath)
 			}
 
 			printNodeWithPath(scene, targetNode)
 			return nil
 		}
 
-		// サマリー表示（オプション）
+		// Display summary (optional)
 		if showSummary {
 			printSceneStats(scene)
 		}
 
-		// シーンツリーを表示
-		fmt.Println("=== シーンツリー ===")
+		// Display scene tree
 		if scene.RootNode != nil {
 			printSceneTree(scene.RootNode, 0, scene)
 		} else {
-			fmt.Println("ルートノードが見つかりませんでした")
+			fmt.Println("Root node not found")
 		}
 
-		// 複数ファイル対応
+		// Support multiple files
 		if len(args) > 1 {
 			for _, file := range args[1:] {
-				// ファイル存在チェック
+				// Check file existence
 				if _, err := os.Stat(file); os.IsNotExist(err) {
-					fmt.Printf("\nエラー: ファイルが見つかりません: %s\n", file)
+					fmt.Printf("\nError: file not found: %s\n", file)
 					continue
 				}
 
 				fmt.Printf("\n" + strings.Repeat("=", 50) + "\n")
-				fmt.Printf("ファイル: %s\n\n", file)
+				fmt.Printf("File: %s\n\n", file)
 
 				scene, err := ParseTscnFile(file)
 				if err != nil {
-					fmt.Printf("エラー: %v\n", err)
+					fmt.Printf("Error: %v\n", err)
 					continue
 				}
 
-				// ノードパス指定がある場合
+				// If node path is specified
 				if nodePath != "" {
 					targetNode := findNodeByPath(scene, nodePath)
 					if targetNode == nil {
-						fmt.Printf("エラー: ノードが見つかりません: %s\n", nodePath)
+						fmt.Printf("Error: node not found: %s\n", nodePath)
 						continue
 					}
 
@@ -795,12 +810,11 @@ var rootCmd = &cobra.Command{
 					continue
 				}
 
-				// サマリー表示（オプション）
+				// Display summary (optional)
 				if showSummary {
 					printSceneStats(scene)
 				}
 
-				fmt.Println("=== シーンツリー ===")
 				if scene.RootNode != nil {
 					printSceneTree(scene.RootNode, 0, scene)
 				}
@@ -812,12 +826,13 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.Flags().BoolVarP(&debugMode, "debug", "d", false, "デバッグモードを有効化")
-	rootCmd.Flags().BoolVarP(&showSummary, "summary", "s", false, "統計サマリーを表示")
-	rootCmd.Flags().StringVarP(&nodePath, "query", "q", "", "特定のノードパスを検索（例: \"Player/Sprite\"）")
+	rootCmd.Flags().BoolVarP(&debugMode, "debug", "d", false, "Enable debug mode")
+	rootCmd.Flags().BoolVarP(&showSummary, "summary", "s", false, "Display statistics summary")
+	rootCmd.Flags().StringVarP(&nodePath, "query", "q", "", "Search for a specific node path (e.g., \"Player/Sprite\")")
+	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Display all properties in detail")
 }
 
-// メイン関数
+// Main function
 func main() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
