@@ -14,6 +14,10 @@ import (
 // デバッグモード
 var debugMode = false
 
+// 表示オプション
+var showSummary = false
+var nodePath = ""
+
 // ノード情報を表す構造体
 type GodotNode struct {
 	Name         string
@@ -510,14 +514,86 @@ func findParentNode(parentPath string, pathMap, nodeMap map[string]*GodotNode, c
 	return nil
 }
 
-// パスでノードを検索
-func findNodeByPath(nodes []*GodotNode, path string) *GodotNode {
-	for _, node := range nodes {
-		if node.Path == path || node.Name == path {
+// パスでノードを検索（シーン全体から）
+func findNodeByPath(scene *GodotScene, path string) *GodotNode {
+	for _, node := range scene.AllNodes {
+		// 完全一致
+		if node.Path == path || node.OriginalName == path {
 			return node
 		}
 	}
+
+	// 部分マッチ（末尾）
+	for _, node := range scene.AllNodes {
+		if strings.HasSuffix(node.Path, "/"+path) {
+			return node
+		}
+	}
+
+	// パス内に含まれる（より柔軟な検索）
+	for _, node := range scene.AllNodes {
+		if strings.Contains(node.Path, path) {
+			return node
+		}
+	}
+
 	return nil
+}
+
+// ルートからノードまでのパスを取得
+func getPathToNode(scene *GodotScene, targetNode *GodotNode) []*GodotNode {
+	var path []*GodotNode
+
+	// ルートから辿る
+	var findPath func(node *GodotNode, target *GodotNode) bool
+	findPath = func(node *GodotNode, target *GodotNode) bool {
+		path = append(path, node)
+
+		if node == target {
+			return true
+		}
+
+		for _, child := range node.Children {
+			if findPath(child, target) {
+				return true
+			}
+		}
+
+		// 見つからなかったので除去
+		path = path[:len(path)-1]
+		return false
+	}
+
+	if scene.RootNode != nil {
+		findPath(scene.RootNode, targetNode)
+	}
+
+	return path
+}
+
+// 指定されたノードのパスとサブツリーを表示
+func printNodeWithPath(scene *GodotScene, targetNode *GodotNode) {
+	// ルートからのパスを表示
+	pathNodes := getPathToNode(scene, targetNode)
+
+	if len(pathNodes) > 0 {
+		fmt.Println("=== パス ===")
+		for i, node := range pathNodes {
+			indentStr := strings.Repeat("  ", i)
+
+			if node == targetNode {
+				// ターゲットノードを強調
+				fmt.Printf("%s%s (%s) ← **ここ**\n", indentStr, node.OriginalName, node.Type)
+			} else {
+				fmt.Printf("%s%s (%s)\n", indentStr, node.OriginalName, node.Type)
+			}
+		}
+		fmt.Println()
+	}
+
+	// ターゲットノード以下のサブツリーを表示
+	fmt.Println("=== サブツリー ===")
+	printSceneTree(targetNode, 0, scene)
 }
 
 // シーンツリーを表示
@@ -527,9 +603,8 @@ func printSceneTree(node *GodotNode, indent int, scene *GodotScene) {
 	}
 
 	indentStr := strings.Repeat("  ", indent)
-	icon := getNodeIcon(node.Type)
 
-	fmt.Printf("%s%s %s (%s)", indentStr, icon, node.OriginalName, node.Type)
+	fmt.Printf("%s%s (%s)", indentStr, node.OriginalName, node.Type)
 
 	if node.Script != "" {
 		scriptPath := resolveResourcePath(node.Script, scene)
@@ -551,41 +626,6 @@ func printSceneTree(node *GodotNode, indent int, scene *GodotScene) {
 	for _, child := range node.Children {
 		printSceneTree(child, indent+1, scene)
 	}
-}
-
-// ノードタイプに応じたアイコンを返す
-func getNodeIcon(nodeType string) string {
-	icons := map[string]string{
-		"Node":              "📁",
-		"Node2D":            "🔵",
-		"Node3D":            "🎯",
-		"Control":           "⬜",
-		"CanvasLayer":       "🖼️",
-		"CharacterBody2D":   "🏃",
-		"RigidBody2D":       "⚽",
-		"Area2D":            "📡",
-		"StaticBody2D":      "🧱",
-		"Sprite2D":          "🖼️",
-		"AnimatedSprite2D":  "🎬",
-		"Label":             "📝",
-		"Button":            "🔘",
-		"TextEdit":          "📄",
-		"Panel":             "📋",
-		"VBoxContainer":     "📦",
-		"HBoxContainer":     "📦",
-		"GridContainer":     "🔲",
-		"ScrollContainer":   "📜",
-		"Camera2D":          "📷",
-		"AudioStreamPlayer": "🔊",
-		"Timer":             "⏰",
-		"AnimationPlayer":   "▶️",
-		"CollisionShape2D":  "🛡️",
-	}
-
-	if icon, exists := icons[nodeType]; exists {
-		return icon
-	}
-	return "❓"
 }
 
 // 重要なプロパティを表示
@@ -660,8 +700,7 @@ func printSceneStats(scene *GodotScene) {
 
 	fmt.Println("\nノードタイプ別:")
 	for nodeType, count := range typeCount {
-		icon := getNodeIcon(nodeType)
-		fmt.Printf("  %s %s: %d個\n", icon, nodeType, count)
+		fmt.Printf("  %s: %d個\n", nodeType, count)
 	}
 
 	// ExtResourceタイプ別集計
@@ -672,7 +711,7 @@ func printSceneStats(scene *GodotScene) {
 			extTypeCount[resource.Type]++
 		}
 		for extType, count := range extTypeCount {
-			fmt.Printf("  📁 %s: %d個\n", extType, count)
+			fmt.Printf("  %s: %d個\n", extType, count)
 		}
 	}
 
@@ -702,8 +741,21 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("パースエラー: %v", err)
 		}
 
-		// 統計情報を表示
-		printSceneStats(scene)
+		// ノードパス指定がある場合
+		if nodePath != "" {
+			targetNode := findNodeByPath(scene, nodePath)
+			if targetNode == nil {
+				return fmt.Errorf("ノードが見つかりません: %s", nodePath)
+			}
+
+			printNodeWithPath(scene, targetNode)
+			return nil
+		}
+
+		// サマリー表示（オプション）
+		if showSummary {
+			printSceneStats(scene)
+		}
 
 		// シーンツリーを表示
 		fmt.Println("=== シーンツリー ===")
@@ -731,7 +783,23 @@ var rootCmd = &cobra.Command{
 					continue
 				}
 
-				printSceneStats(scene)
+				// ノードパス指定がある場合
+				if nodePath != "" {
+					targetNode := findNodeByPath(scene, nodePath)
+					if targetNode == nil {
+						fmt.Printf("エラー: ノードが見つかりません: %s\n", nodePath)
+						continue
+					}
+
+					printNodeWithPath(scene, targetNode)
+					continue
+				}
+
+				// サマリー表示（オプション）
+				if showSummary {
+					printSceneStats(scene)
+				}
+
 				fmt.Println("=== シーンツリー ===")
 				if scene.RootNode != nil {
 					printSceneTree(scene.RootNode, 0, scene)
@@ -745,6 +813,8 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.Flags().BoolVarP(&debugMode, "debug", "d", false, "デバッグモードを有効化")
+	rootCmd.Flags().BoolVarP(&showSummary, "summary", "s", false, "統計サマリーを表示")
+	rootCmd.Flags().StringVarP(&nodePath, "query", "q", "", "特定のノードパスを検索（例: \"Player/Sprite\"）")
 }
 
 // メイン関数
