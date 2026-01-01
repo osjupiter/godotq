@@ -55,8 +55,8 @@ func debugLog(msg string, args ...interface{}) {
 	}
 }
 
-// tscnファイルをパースする
-func parseTscnFile(filepath string) (*GodotScene, error) {
+// ParseTscnFile tscnファイルをパースする
+func ParseTscnFile(filepath string) (*GodotScene, error) {
 	debugLog("ファイルを開いています: %s", filepath)
 
 	file, err := os.Open(filepath)
@@ -74,6 +74,11 @@ func parseTscnFile(filepath string) (*GodotScene, error) {
 	}
 
 	scanner := bufio.NewScanner(file)
+	// バッファサイズを増やして大きなファイルに対応（最大10MB）
+	const maxCapacity = 10 * 1024 * 1024 // 10MB
+	buf := make([]byte, maxCapacity)
+	scanner.Buffer(buf, maxCapacity)
+
 	var currentNode *GodotNode
 	var inNode bool
 	var multilineProperty string
@@ -692,7 +697,7 @@ var rootCmd = &cobra.Command{
 		fmt.Printf("ファイル: %s\n\n", tscnFile)
 
 		// tscnファイルをパース
-		scene, err := parseTscnFile(tscnFile)
+		scene, err := ParseTscnFile(tscnFile)
 		if err != nil {
 			return fmt.Errorf("パースエラー: %v", err)
 		}
@@ -720,7 +725,7 @@ var rootCmd = &cobra.Command{
 				fmt.Printf("\n" + strings.Repeat("=", 50) + "\n")
 				fmt.Printf("ファイル: %s\n\n", file)
 
-				scene, err := parseTscnFile(file)
+				scene, err := ParseTscnFile(file)
 				if err != nil {
 					fmt.Printf("エラー: %v\n", err)
 					continue

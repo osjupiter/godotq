@@ -31,7 +31,7 @@ func TestTscnParser(t *testing.T) {
 	defer os.Remove(tempFile)
 
 	// パーサーをテスト
-	scene, err := parseTscnFile(tempFile)
+	scene, err := ParseTscnFile(tempFile)
 	if err != nil {
 		t.Fatalf("パースエラー: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestMainTscnStructure(t *testing.T) {
 		t.Skip("../main.tscn が見つかりません。テストをスキップします。")
 	}
 
-	scene, err := parseTscnFile("../main.tscn")
+	scene, err := ParseTscnFile("../main.tscn")
 	if err != nil {
 		t.Fatalf("main.tscnパースエラー: %v", err)
 	}
@@ -190,7 +190,7 @@ text = "★3
 	}
 	defer os.Remove(tempFile)
 
-	scene, err := parseTscnFile(tempFile)
+	scene, err := ParseTscnFile(tempFile)
 	if err != nil {
 		t.Fatalf("パースエラー: %v", err)
 	}

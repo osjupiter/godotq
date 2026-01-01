@@ -1,0 +1,3 @@
+[submodule "test/godot-demo-projects"]
+	path = test/godot-demo-projects
+	url = https://github.com/godotengine/godot-demo-projects.git
