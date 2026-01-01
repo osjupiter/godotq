@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go build:*)",
+      "Bash(./gdq.exe sample.tscn)",
+      "Bash(./gdq.exe:*)",
+      "Bash(go test:*)",
+      "Bash(git submodule add:*)",
+      "Bash(git submodule update:*)"
+    ]
+  }
+}
